@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>IoT Dashboard</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #f5f5f5;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .dashboard {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 1rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .sensor-values {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .fan {
+      width: 80px;
+      height: 80px;
+      margin: 1rem auto;
+      background: url('https://i.imgur.com/xhGAz1S.png') no-repeat center center;
+      background-size: contain;
+    }
+
+    .rotate {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 200px !important;
+    }
+
+    @media (min-width: 768px) {
+      .sensor-values {
+        flex-direction: row;
+        justify-content: space-around;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>IoT Room Dashboard</h2>
+  <div class="dashboard">
+
+    <!-- Sensor Readings -->
+    <div class="section sensor-values">
+      <div><strong>Temperature:</strong> <span id="temp">--</span> °C</div>
+      <div><strong>LDR:</strong> <span id="ldr">--</span></div>
+      <div><strong>Fan Status:</strong> <span id="fan">--</span></div>
+      <div><strong>LED Status:</strong> <span id="led">--</span></div>
+    </div>
+
+    <!-- Fan Animation -->
+    <div class="section" style="text-align: center;">
+      <p><strong>Fan Animation:</strong></p>
+      <div id="fan-img" class="fan"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="section">
+      <p><strong>Temperature Graph:</strong></p>
+      <canvas id="tempChart"></canvas>
+    </div>
+
+    <div class="section">
+      <p><strong>LDR Graph:</strong></p>
+      <canvas id="ldrChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
+
+    client.on('connect', () => {
+      client.subscribe('/iot/sensors/temperature');
+      client.subscribe('/iot/sensors/ldr');
+      client.subscribe('/iot/status/fan');
+      client.subscribe('/iot/status/led');
+    });
+
+    const fanImg = document.getElementById("fan-img");
+
+    client.on('message', (topic, message) => {
+      const msg = message.toString();
+
+      if (topic === '/iot/sensors/temperature') {
+        document.getElementById('temp').innerText = msg;
+        updateTempChart(parseFloat(msg));
+      } else if (topic === '/iot/sensors/ldr') {
+        document.getElementById('ldr').innerText = msg;
+        updateLDRChart(parseInt(msg));
+      } else if (topic === '/iot/status/fan') {
+        document.getElementById('fan').innerText = msg;
+        fanImg.classList.toggle("rotate", msg === "ON");
+      } else if (topic === '/iot/status/led') {
+        document.getElementById('led').innerText = msg;
+      }
+    });
+
+    const tempCtx = document.getElementById('tempChart').getContext('2d');
+    const ldrCtx = document.getElementById('ldrChart').getContext('2d');
+
+    const tempChart = new Chart(tempCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Temperature (°C)',
+          data: [],
+          borderColor: 'red',
+          fill: false
+        }]
+      },
+      options: {
+        animation: false,
+        scales: { x: { display: false }, y: { beginAtZero: true } }
+      }
+    });
+
+    const ldrChart = new Chart(ldrCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'LDR Value',
+          data: [],
+          borderColor: 'blue',
+          fill: false
+        }]
+      },
+      options: {
+        animation: false,
+        scales: { x: { display: false }, y: { beginAtZero: true } }
+      }
+    });
+
+    function updateTempChart(value) {
+      const d = tempChart.data;
+      d.labels.push('');
+      d.datasets[0].data.push(value);
+      if (d.labels.length > 20) {
+        d.labels.shift();
+        d.datasets[0].data.shift();
+      }
+      tempChart.update();
+    }
+
+    function updateLDRChart(value) {
+      const d = ldrChart.data;
+      d.labels.push('');
+      d.datasets[0].data.push(value);
+      if (d.labels.length > 20) {
+        d.labels.shift();
+        d.datasets[0].data.shift();
+      }
+      ldrChart.update();
+    }
+  </script>
+</body>
+</html>
